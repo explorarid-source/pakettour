@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explorar Indonesia - Generator Proposal Paket Tour</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://kit.fontawesome.com/a7c4915663.js" crossorigin="anonymous"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        
+        /* ----------------------------------------------------- */
+        /* PERUBAHAN UTAMA: BACKGROUND GAMBAR & OVERLAY */
+        /* ----------------------------------------------------- */
+        body { 
+            font-family: 'Inter', sans-serif; 
+            /* Latar belakang yang indah dari gambar yang diunggah */
+            background-image: url('Indonesia (2).jpg');
+            background-size: cover; /* Pastikan gambar menutupi seluruh area */
+            background-attachment: fixed; /* Gambar tidak bergerak saat digulir */
+            background-position: center top; /* Fokus pada bagian atas gambar */
+            background-color: #003049; /* Warna fallback jika gambar gagal dimuat */
+        } 
+
+        /* Overlay untuk menjaga keterbacaan teks utama */
+        #app-container::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.4); /* Overlay hitam semi-transparan 40% */
+            z-index: 0;
+        }
+
+        /* ----------------------------------------------------- */
+        /* STYLING UI LAINNYA */
+        /* ----------------------------------------------------- */
+        .proposal-container { 
+            max-width: 900px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            background-color: rgba(255, 255, 255, 0.95); /* Sedikit transparan untuk melihat background */
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3); /* Bayangan yang lebih menonjol */
+            position: relative; /* Penting untuk z-index */
+            z-index: 1; /* Di atas overlay */
+        }
+        
+        /* Kontainer Utama Editor/Preview */
+        #main-content > .p-4, #main-content > .p-8 {
+            position: relative; /* Penting agar konten di atas overlay */
+            z-index: 1;
+        }
+        
+        .btn-primary { background-color: #003049; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 600; transition: background-color 0.3s; }
+        .btn-primary:hover { background-color: #1a4d65; }
+        .btn-secondary { background-color: #d62828; color: white; padding: 8px 15px; border-radius: 6px; transition: background-color 0.3s; }
+        .btn-secondary:hover { background-color: #c1121f; }
+        .input-style { border: 1px solid #ccc; padding: 8px; border-radius: 6px; width: 100%; transition: border-color 0.3s; }
+        .input-style:focus { border-color: #003049; outline: none; box-shadow: 0 0 0 2px rgba(0, 48, 73, 0.2); }
+        .ai-button { background-color: #fcbf49; color: #003049; font-weight: 600; padding: 8px 12px; border-radius: 6px; transition: background-color 0.3s; }
+        .ai-button:hover { background-color: #e8b141; }
+        
+        /* Sidebar dan Header agar tetap di atas overlay */
+        #draft-sidebar { z-index: 41; }
+        #main-content > .sticky { z-index: 31; }
+
+        /* CSS Khusus untuk Mode Cetak (PDF) */
+        @media print {
+            body { 
+                margin: 0; 
+                padding: 0; 
+                background-color: white !important; 
+                background-image: none !important; /* Hapus gambar latar belakang saat mencetak */
+            }
+            #app-container::before {
+                content: none !important; /* Hapus overlay saat mencetak */
+            }
+            .proposal-container { 
+                box-shadow: none !important; 
+                max-width: none !important; 
+                margin: 0 !important; 
+                width: 100% !important; 
+                padding: 0 !important;
+                background-color: white !important;
+            }
+            /* Sembunyikan semua elemen UI kecuali proposal-container saat dicetak */
+            #app-container > *:not(.proposal-container-wrapper) { 
+                display: none !important; 
+            }
+            .proposal-container-wrapper {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+
+    <!-- Firebase SDK Imports (MUST BE FIRST) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, addDoc, setDoc, onSnapshot, collection, query, where, orderBy, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables for Firebase and App State
+        window.firebaseApp = null;
+        window.db = null;
+        window.auth = null;
+        window.userId = null;
+        window.isAuthReady = false;
+        
+        // Use provided global variables
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        let firebaseConfig;
+        try {
+            firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        } catch (e) {
+            console.error("Failed to parse firebase config:", e);
+            firebaseConfig = {};
+        }
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        /**
+         * Initializes Firebase and authenticates the user.
+         */
+        window.initializeFirebase = async () => {
+            if (Object.keys(firebaseConfig).length === 0) {
+                console.error("Firebase config is empty. Cannot initialize.");
+                return;
+            }
+            try {
+                // setLogLevel('debug'); // Uncomment for debugging
+                window.firebaseApp = initializeApp(firebaseConfig);
+                window.db = getFirestore(window.firebaseApp);
+                window.auth = getAuth(window.firebaseApp);
+
+                // Authentication
+                if (initialAuthToken) {
+                    await signInWithCustomToken(window.auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(window.auth);
+                }
+
+                onAuthStateChanged(window.auth, (user) => {
+                    if (user) {
+                        window.userId = user.uid;
+                        console.log("User authenticated:", window.userId);
+                        window.isAuthReady = true;
+                        window.app.loadDrafts(); // Load drafts once auth is ready
+                    } else {
+                        window.userId = crypto.randomUUID(); // Fallback to random ID
+                        console.log("Signed in anonymously or using fallback ID:", window.userId);
+                        window.isAuthReady = true;
+                        window.app.loadDrafts();
+                    }
+                });
+
+            } catch (error) {
+                console.error("Firebase initialization or sign-in failed:", error);
+                // Even if auth fails, set isAuthReady to true to proceed with UI
+                window.isAuthReady = true;
+            }
+        };
+
+        // Call initialization function
+        window.initializeFirebase();
+    </script>
+    
+    <script>
+        // --- PROMPT FINAL PENGEMBANGAN WEBSITE: GENERATOR PROPOSAL PAKET TOUR ---
+
+        // Global constant for contact information (VII. Informasi Kontak)
+        const CONTACT_INFO = {
+            picName: "Qiyamul Wustha Muhammad (Kim)",
+            phone: "+62 851-6132-5478",
+            email: "explorar.id@gmail.com",
+            address: "Gg Gegerkalong Tengah II No 37, Bandung"
+        };
+        
+        // Default Itinerary structure
+        const defaultItineraryItem = (dayNum) => ({
+            day: dayNum,
+            time: "08.00",
+            durationHours: 2,
+            activity: "Rencana aktivitas harian...",
+            accommodation: "Nama Akomodasi/Hotel",
+            meals: { breakfast: true, lunch: true, dinner: true },
+        });
+
+        // Initial state for a new proposal
+        const initialProposalData = {
+            // I. Informasi Umum Paket
+            title: "Paket Wisata Eksotis Raja Ampat",
+            period: "2024-12-01 hingga 2024-12-05",
+            destination: "Raja Ampat, Papua Barat",
+            duration: 5, // In days
+            photoUrl: "https://placehold.co/600x400/003049/ffffff?text=FOTO+ILLUSTRASI+PAKET+TOUR",
+            // II. Deskripsi & Rencana Perjalanan
+            shortDescription: "Jelajahi keindahan bawah laut dan pulau-pulau ikonik Raja Ampat. Paket 5 hari penuh petualangan dan relaksasi di surga dunia.",
+            itinerary: [
+                defaultItineraryItem(1),
+                defaultItineraryItem(2),
+                defaultItineraryItem(3),
+                defaultItineraryItem(4),
+                defaultItineraryItem(5),
+            ],
+            translatedItinerary: null, // NEW FIELD for English translation
+            // III. Harga & Opsi
+            price: { idr: 7500000, usd: 500, myr: 2500, sgd: 650 },
+            options: "Upgrade Hotel Bintang 5: IDR 2,500,000 / orang\nTambahan kegiatan diving: IDR 1,200,000 / sesi",
+            priceValidity: "Berlaku hingga 31 Desember 2024",
+            // IV. Detail Konten Wajib
+            includes: "- Tiket pesawat pulang-pergi (ekonomi)\n- Transportasi speed boat antar pulau\n- Akomodasi 4 malam di resort",
+            excludes: "- Pengeluaran pribadi dan tips\n- Biaya masuk konservasi (Pinisi Fee)\n- Asuransi perjalanan",
+            // V. Syarat & Ketentuan (T&C) & NOTES
+            notes: "Itinerary dapat disesuaikan tergantung kondisi cuaca dan ketersediaan waktu penerbangan.",
+            terms: "Harap baca syarat dan ketentuan lengkap di halaman akhir proposal.",
+            paymentTerms: "Ketentuan Pembayaran:\n1. DP 50% saat konfirmasi pemesanan.\n2. Pelunasan H-14 sebelum tanggal keberangkatan.",
+            cancellationPolicy: "Ketentuan Pembatalan:\n- Pembatalan >30 hari: DP dikembalikan 50%\n- Pembatalan <30 hari: DP hangus",
+            // VI. Payment Method
+            paymentMethod: "Bank Mandiri PT Explorar Indonesia Corp (132-00-2726898-7)\nBCA Qiyamul Wustha Muhammad (777-200-4691).\n\nNote: Belum termasuk PPN 11% (akan ditambahkan saat penagihan akhir).",
+        };
+
+        const app = {
+            data: { ...initialProposalData },
+            drafts: [],
+            currentDraftId: null,
+            viewMode: 'editor', // 'editor', 'preview', or 'print'
+            isLoadingAI: false,
+            isLoadingSave: false,
+            isLoadingDrafts: false,
+            message: null,
+            
+            /**
+             * Updates the internal data state and re-renders the form/preview.
+             * @param {string} key - The data property key.
+             * @param {*} value - The new value.
+             */
+            updateData(key, value) {
+                // Handle nested updates (e.g., price.idr)
+                if (key.includes('.')) {
+                    const [mainKey, subKey] = key.split('.');
+                    if (this.data[mainKey] && this.data[mainKey].hasOwnProperty(subKey)) {
+                        // Ensure numeric conversion for price fields
+                        if (mainKey === 'price' && !isNaN(value)) {
+                            this.data[mainKey][subKey] = parseFloat(value);
+                        } else {
+                            this.data[mainKey][subKey] = value;
+                        }
+                    }
+                } else {
+                    this.data[key] = value;
+                }
+                this.render();
+            },
+
+            /**
+             * Handles changes in a form input element.
+             * @param {Event} e - The input change event.
+             */
+            handleInputChange(e) {
+                const { name, value, type, checked, dataset } = e.target;
+                
+                if (dataset.itineraryindex !== undefined) {
+                    const index = parseInt(dataset.itineraryindex);
+                    const mealType = dataset.mealtype;
+                    if (mealType) {
+                        this.data.itinerary[index].meals[mealType] = checked;
+                    } else {
+                        const key = name.split('-')[0];
+                        this.data.itinerary[index][key] = type === 'number' ? parseFloat(value) : value;
+                    }
+                } else if (type === 'number') {
+                    this.updateData(name, parseFloat(value) || 0);
+                } else {
+                    this.updateData(name, value);
+                }
+            },
+
+            /**
+             * Adds a new day to the itinerary.
+             */
+            addDay() {
+                const newDayNum = this.data.itinerary.length + 1;
+                this.data.itinerary.push(defaultItineraryItem(newDayNum));
+                this.data.duration = newDayNum;
+                this.data.translatedItinerary = null; // Reset translation
+                this.render();
+            },
+
+            /**
+             * Removes a day from the itinerary and re-numbers the remaining days.
+             * @param {number} index - The index of the day to remove.
+             */
+            removeDay(index) {
+                if (this.data.itinerary.length > 1) {
+                    this.data.itinerary.splice(index, 1);
+                    this.data.itinerary.forEach((item, i) => item.day = i + 1);
+                    this.data.duration = this.data.itinerary.length;
+                    this.data.translatedItinerary = null; // Reset translation
+                    this.render();
+                } else {
+                    this.showMessage("Itinerary minimal harus memiliki 1 hari.", 'error');
+                }
+            },
+
+            /**
+             * Changes the application's view mode.
+             * @param {'editor' | 'preview' | 'print'} mode
+             */
+            changeView(mode) {
+                if (mode === 'print') {
+                    this.viewMode = 'print';
+                    this.render();
+                    // Delay print slightly to ensure the DOM is fully rendered in 'print' mode
+                    setTimeout(() => {
+                        window.print();
+                        this.viewMode = 'preview'; // Return to preview mode after print dialog is closed/canceled
+                        this.render();
+                    }, 500);
+                } else {
+                    this.viewMode = mode;
+                    this.render();
+                }
+            },
+            
+            /**
+             * Copies the Proposal content (HTML) from the Preview container to the clipboard.
+             */
+            copyToClipboard() {
+                const previewContent = document.getElementById('proposal-content');
+                if (!previewContent) {
+                    this.showMessage("Konten proposal tidak ditemukan.", 'error');
+                    return;
+                }
+
+                try {
+                    // Create a range and selection object
+                    const range = document.createRange();
+                    range.selectNode(previewContent);
+                    window.getSelection().removeAllRanges();
+                    window.getSelection().addRange(range);
+
+                    // Execute copy command
+                    document.execCommand('copy');
+                    
+                    // Cleanup selection
+                    window.getSelection().removeAllRanges();
+
+                    this.showMessage("Seluruh Proposal berhasil disalin! Tempel (Paste) di Google Docs.", 'success');
+                } catch (err) {
+                    console.error('Gagal menyalin ke clipboard:', err);
+                    this.showMessage("Gagal menyalin. Silakan coba salin manual (Ctrl+A, Ctrl+C).", 'error');
+                }
+            },
+
+
+            /**
+             * Displays a temporary message to the user.
+             * @param {string} text - The message text.
+             * @param {'success' | 'error' | 'info'} type - The message type.
+             */
+            showMessage(text, type = 'info') {
+                this.message = { text, type };
+                this.render();
+                setTimeout(() => {
+                    this.message = null;
+                    this.render();
+                }, 4000);
+            },
+
+            /**
+             * Calls the Gemini API for text generation (text/plain) or structured (JSON).
+             * (Same implementation as previous version)
+             */
+            async callGeminiAPI(systemPrompt, userQuery, targetField, schema = null) {
+                this.isLoadingAI = true;
+                this.render();
+
+                const apiKey = ""; // Canvas will provide this if needed
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+                const payload = {
+                    contents: [{ parts: [{ text: userQuery }] }],
+                    tools: [{ "google_search": {} }],
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                    generationConfig: {
+                        responseMimeType: schema ? "application/json" : "text/plain",
+                        ...(schema && { responseSchema: schema })
+                    },
+                };
+
+                let response;
+                let attempts = 0;
+                const maxAttempts = 3;
+                let delay = 1000;
+
+                while (attempts < maxAttempts) {
+                    try {
+                        response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (response.ok) break;
+
+                        if (response.status === 429 || response.status >= 500) {
+                            console.warn(`Attempt ${attempts + 1} failed with status ${response.status}. Retrying in ${delay}ms...`);
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            delay *= 2; // Exponential backoff
+                        } else {
+                            throw new Error(`API returned status ${response.status}`);
+                        }
+                    } catch (error) {
+                        console.error("Fetch error:", error);
+                        break;
+                    }
+                    attempts++;
+                }
+
+                this.isLoadingAI = false;
+
+                if (!response || !response.ok) {
+                    this.showMessage("Gagal terhubung ke AI. Silakan coba lagi.", 'error');
+                    this.render();
+                    return;
+                }
+
+                try {
+                    const result = await response.json();
+                    const candidate = result.candidates?.[0];
+                    if (!candidate) throw new Error("API response incomplete.");
+
+                    if (schema) {
+                        // Handle structured JSON output
+                        const jsonText = candidate.content?.parts?.[0]?.text;
+                        if (jsonText) {
+                            return JSON.parse(jsonText);
+                        }
+                    } else {
+                        // Handle standard text output
+                        const text = candidate.content?.parts?.[0]?.text || "Gagal menghasilkan teks.";
+                        if (targetField.startsWith('itinerary')) {
+                            // For itinerary refinement
+                            const index = parseInt(targetField.split('.')[1]);
+                            this.data.itinerary[index].activity = text.trim();
+                        } else {
+                            // For short description or translation
+                            this.updateData(targetField, text.trim());
+                        }
+                        this.showMessage("Teks berhasil dihasilkan dan diperbarui.", 'success');
+                    }
+
+                } catch (error) {
+                    console.error("Error processing AI response:", error);
+                    this.showMessage("Terjadi kesalahan saat memproses respons AI.", 'error');
+                }
+                this.render();
+            },
+
+            /**
+             * Triggers AI generation for the short description.
+             */
+            generateShortDescription() {
+                const systemPrompt = "Anda adalah penulis proposal perjalanan wisata yang sangat persuasif. Buatlah deskripsi paket tour yang menarik, elegan, dan profesional (maksimal 3 kalimat). Gunakan bahasa Indonesia formal dan meyakinkan.";
+                const userQuery = `Buatkan deskripsi persuasif untuk paket tour ke ${this.data.destination} selama ${this.data.duration} hari, dengan judul: "${this.data.title}". Rangkum intisarinya.`;
+                this.callGeminiAPI(systemPrompt, userQuery, 'shortDescription');
+            },
+
+            /**
+             * Triggers AI refinement for a specific itinerary activity.
+             * @param {number} index - The index of the itinerary item.
+             */
+            refineItineraryText(index) {
+                const item = this.data.itinerary[index];
+                const systemPrompt = "Anda adalah seorang pencerita perjalanan yang handal. Sempurnakan dan buatlah narasi yang menarik (maksimal 2 kalimat) dari poin aktivitas harian ini. Ubah poin-poin tersebut menjadi narasi yang mengundang minat. Output harus dalam bahasa Indonesia.";
+                const userQuery = `Sempurnakan teks aktivitas harian ini: "${item.activity}". Judul paket: ${this.data.title}.`;
+                this.callGeminiAPI(systemPrompt, userQuery, `itinerary.${index}`);
+            },
+            
+            /**
+             * NEW GEMINI FEATURE: Generates structured T&C and Payment Policy.
+             */
+            async generateTermsAndConditions() {
+                const systemPrompt = "Anda adalah pakar hukum perjalanan wisata Indonesia. Buatlah draf Syarat Pembayaran dan Kebijakan Pembatalan yang ringkas, profesional, dan adil untuk paket wisata mewah. Hasil harus dalam bahasa Indonesia dan dikemas sebagai objek JSON.";
+                const userQuery = `Buatkan draf Syarat Pembayaran dan Kebijakan Pembatalan untuk paket tour "${this.data.title}" dengan durasi ${this.data.duration} hari dan harga dasar IDR ${this.data.price.idr.toLocaleString()}. Target Pasar: Wisatawan domestik/internasional premium.`;
+                
+                const responseSchema = {
+                    type: "OBJECT",
+                    properties: {
+                        "paymentTerms": { "type": "STRING", "description": "Draft Syarat Pembayaran, pisahkan setiap poin dengan baris baru." },
+                        "cancellationPolicy": { "type": "STRING", "description": "Draft Kebijakan Pembatalan, pisahkan setiap poin dengan baris baru." }
+                    },
+                    required: ["paymentTerms", "cancellationPolicy"]
+                };
+
+                const result = await this.callGeminiAPI(systemPrompt, userQuery, null, responseSchema);
+
+                if (result) {
+                    this.data.paymentTerms = result.paymentTerms || this.data.paymentTerms;
+                    this.data.cancellationPolicy = result.cancellationPolicy || this.data.cancellationPolicy;
+                    this.showMessage("Draf Syarat & Ketentuan berhasil dibuat dan diperbarui.", 'success');
+                } else {
+                    this.showMessage("Gagal membuat Syarat & Ketentuan.", 'error');
+                }
+                this.render();
+            },
+
+            /**
+             * NEW GEMINI FEATURE: Translates the full itinerary to English.
+             */
+            translateItinerary() {
+                const itineraryText = this.data.itinerary.map(item => 
+                    `Hari ${item.day} (${item.time} / ${item.accommodation}): ${item.activity}`
+                ).join('\n');
+                
+                const systemPrompt = "You are a professional translator for a luxury Indonesian travel agency. Translate the provided daily tour itinerary from Indonesian to clear, engaging English. Maintain a sophisticated and descriptive tone. Output only the full translated itinerary text, formatted clearly with Day X headers and bullet points for readability.";
+                const userQuery = `Translate this full tour itinerary from Indonesian to English:\n\n${itineraryText}`;
+                
+                this.callGeminiAPI(systemPrompt, userQuery, 'translatedItinerary');
+            },
+
+
+            /**
+             * Saves the current proposal data as a draft in Firestore.
+             */
+            async saveDraft() {
+                if (!window.isAuthReady || !window.db || !window.userId) {
+                    this.showMessage("Otentikasi belum siap. Coba lagi sebentar.", 'info');
+                    return;
+                }
+
+                this.isLoadingSave = true;
+                this.render();
+                
+                try {
+                    const collectionPath = `/artifacts/${appId}/users/${window.userId}/tour_proposals`;
+                    // Clone data to ensure no circular structure, and exclude null translation if empty
+                    const dataToSave = JSON.parse(JSON.stringify(this.data)); 
+                    if (dataToSave.translatedItinerary === null) { delete dataToSave.translatedItinerary; }
+
+                    dataToSave.saveDate = new Date().toISOString();
+                    dataToSave.userId = window.userId;
+                    
+                    if (this.currentDraftId) {
+                        const docRef = doc(window.db, collectionPath, this.currentDraftId);
+                        await setDoc(docRef, dataToSave);
+                        this.showMessage(`Draf "${this.data.title}" berhasil diperbarui.`, 'success');
+                    } else {
+                        const docRef = await addDoc(collection(window.db, collectionPath), dataToSave);
+                        this.currentDraftId = docRef.id;
+                        this.showMessage(`Draf baru "${this.data.title}" berhasil disimpan.`, 'success');
+                    }
+                    this.loadDrafts(); // Reload list after saving
+                } catch (e) {
+                    console.error("Error saving document: ", e);
+                    this.showMessage("Gagal menyimpan draf. Periksa koneksi atau log konsol.", 'error');
+                } finally {
+                    this.isLoadingSave = false;
+                    this.render();
+                }
+            },
+
+            /**
+             * Loads all drafts from Firestore for the current user.
+             */
+            async loadDrafts() {
+                if (!window.isAuthReady || !window.db || !window.userId) {
+                    return;
+                }
+
+                this.isLoadingDrafts = true;
+                this.render();
+
+                try {
+                    const collectionPath = `/artifacts/${appId}/users/${window.userId}/tour_proposals`;
+                    const q = query(collection(window.db, collectionPath));
+                    const querySnapshot = await getDocs(q);
+                    
+                    this.drafts = [];
+                    querySnapshot.forEach((doc) => {
+                        this.drafts.push({ id: doc.id, ...doc.data() });
+                    });
+                    
+                } catch (e) {
+                    console.error("Error loading drafts: ", e);
+                    this.showMessage("Gagal memuat daftar draf.", 'error');
+                } finally {
+                    this.isLoadingDrafts = false;
+                    this.render();
+                }
+            },
+
+            /**
+             * Selects a draft and loads its data into the editor.
+             * @param {string} draftId - The ID of the draft to load.
+             */
+            selectDraft(draftId) {
+                const draft = this.drafts.find(d => d.id === draftId);
+                if (draft) {
+                    this.data = { ...draft };
+                    this.currentDraftId = draftId;
+                    this.data.itinerary = this.data.itinerary || []; // Ensure itinerary is an array
+                    this.data.translatedItinerary = this.data.translatedItinerary || null; // Ensure new field is set
+                    this.showMessage(`Draf "${this.data.title}" berhasil dimuat.`, 'info');
+                    this.changeView('editor'); // Switch back to editor
+                } else {
+                    this.showMessage("Draf tidak ditemukan.", 'error');
+                }
+            },
+
+            /**
+             * Creates a new blank proposal.
+             */
+            newProposal() {
+                this.data = { ...initialProposalData, itinerary: initialProposalData.itinerary.map(item => ({...item})) };
+                this.currentDraftId = null;
+                this.showMessage("Proposal baru telah dimulai.", 'info');
+                this.changeView('editor');
+            },
+            
+            // --- Rendering Functions ---
+
+            /**
+             * Renders the main application UI.
+             */
+            render() {
+                const appContainer = document.getElementById('app-container');
+                if (!appContainer) return;
+
+                let content = '';
+
+                if (this.viewMode === 'editor') {
+                    content = this.renderEditor();
+                } else if (this.viewMode === 'preview') {
+                    content = this.renderPreview();
+                } else if (this.viewMode === 'print') {
+                     // Render only the proposal content for printing
+                    content = `<div class="proposal-container-wrapper">${this.renderProposalContent()}</div>`;
+                }
+                
+                // Message Box
+                let messageHtml = '';
+                if (this.message) {
+                    const color = this.message.type === 'error' ? 'bg-red-500' : (this.message.type === 'success' ? 'bg-green-500' : 'bg-blue-500');
+                    messageHtml = `
+                        <div class="fixed top-4 right-4 z-50 p-4 rounded-lg text-white font-bold ${color} shadow-lg transition-opacity duration-300">
+                            ${this.message.text}
+                        </div>
+                    `;
+                }
+                
+                // Only show sidebar and controls in 'editor'/'preview' mode
+                if (this.viewMode !== 'print') {
+                    // Drafts sidebar
+                    const draftSidebar = this.renderDraftsSidebar();
+
+                    appContainer.innerHTML = `
+                        ${messageHtml}
+                        ${draftSidebar}
+                        <div id="main-content" class="w-full ${this.viewMode === 'editor' ? 'md:ml-64' : 'ml-0'} transition-all duration-300">
+                            <!-- Main Header and Controls -->
+                            <div class="sticky top-0 bg-white p-4 border-b z-30 shadow-sm flex flex-col sm:flex-row justify-between items-center space-y-3 sm:space-y-0">
+                                <h1 class="text-3xl font-extrabold text-[#003049] flex items-center">
+                                    <i class="fa-solid fa-map-location-dot mr-3 text-[#fcbf49]"></i> Explorar Indonesia
+                                </h1>
+                                <div class="flex flex-wrap justify-center sm:justify-end space-x-3">
+                                    <button onclick="window.app.changeView('editor')" class="p-2 rounded-lg font-medium transition-colors ${this.viewMode === 'editor' ? 'bg-[#003049] text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}">
+                                        <i class="fa-solid fa-pen-to-square mr-1"></i> Edit Proposal
+                                    </button>
+                                    <button onclick="window.app.changeView('preview')" class="p-2 rounded-lg font-medium transition-colors ${this.viewMode === 'preview' ? 'bg-[#003049] text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}">
+                                        <i class="fa-solid fa-eye mr-1"></i> Preview Dokumen
+                                    </button>
+                                    <button onclick="window.app.changeView('print')" class="p-2 rounded-lg font-medium transition-colors bg-[#d62828] text-white hover:bg-[#c1121f]">
+                                        <i class="fa-solid fa-print mr-1"></i> PDF/Print
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Content Area -->
+                            <div class="p-4 sm:p-8">
+                                ${content}
+                            </div>
+                            
+                            <!-- Footer -->
+                            <footer class="text-center py-4 text-sm text-gray-200 border-t border-gray-600 mt-8" style="background-color: rgba(0, 0, 0, 0.5);">
+                                © 2024 Explorar Indonesia. Generator Proposal oleh Gemini AI.
+                                <p class="mt-1">User ID: <span class="font-mono text-xs text-[#fcbf49]">${window.userId || 'Loading...'}</span></p>
+                            </footer>
+                        </div>
+                    `;
+                } else {
+                    // Only render the clean print content when in 'print' mode
+                    appContainer.innerHTML = content; 
+                }
+
+
+                // After rendering, reattach the event listener to the main form (if in editor mode)
+                if (this.viewMode === 'editor') {
+                    const form = document.getElementById('proposal-form');
+                    if (form) {
+                        form.oninput = (e) => this.handleInputChange(e);
+                        // Attach specific click handlers for dynamic elements
+                        document.querySelectorAll('[data-action="refine-itinerary"]').forEach(btn => {
+                            btn.onclick = (e) => { e.preventDefault(); this.refineItineraryText(parseInt(btn.dataset.index)); };
+                        });
+                        document.querySelectorAll('[data-action="remove-day"]').forEach(btn => {
+                            btn.onclick = (e) => { e.preventDefault(); this.removeDay(parseInt(btn.dataset.index)); };
+                        });
+                    }
+                }
+                
+                // Attach copy handler for preview mode
+                if (this.viewMode === 'preview') {
+                    const copyButton = document.getElementById('copy-to-gdoc');
+                    if (copyButton) {
+                        copyButton.onclick = () => this.copyToClipboard();
+                    }
+                }
+            },
+
+            /**
+             * Renders the Drafts Sidebar (only for editor view).
+             */
+            renderDraftsSidebar() {
+                 return `
+                    <div id="draft-sidebar" class="fixed top-0 left-0 w-64 h-full bg-white border-r p-4 z-41 shadow-xl hidden md:block overflow-y-auto">
+                        <div class="mt-20"> <!-- Push down past fixed header -->
+                            <h2 class="text-xl font-bold text-[#003049] mb-4 border-b pb-2">Manajemen Draf</h2>
+                            <button onclick="window.app.newProposal()" class="w-full btn-primary flex items-center justify-center mb-4">
+                                <i class="fa-solid fa-plus mr-2"></i> Proposal Baru
+                            </button>
+                            <button onclick="window.app.saveDraft()" class="w-full bg-[#f4a261] text-white p-2 rounded-lg font-semibold flex items-center justify-center transition-colors hover:bg-[#e8914f] ${this.isLoadingSave ? 'opacity-70 cursor-not-allowed' : ''}" ${this.isLoadingSave ? 'disabled' : ''}>
+                                ${this.isLoadingSave ? `<i class="fas fa-spinner fa-spin mr-2"></i>` : `<i class="fa-solid fa-floppy-disk mr-2"></i>`}
+                                ${this.currentDraftId ? 'Perbarui Draf' : 'Simpan Draf Baru'}
+                            </button>
+                            
+                            <hr class="my-4">
+                            
+                            <h3 class="text-md font-semibold text-gray-700 mb-2">Daftar Draf Tersimpan</h3>
+                            ${this.isLoadingDrafts ? `<p class="text-gray-500"><i class="fas fa-circle-notch fa-spin mr-2"></i> Memuat draf...</p>` : ''}
+                            
+                            <ul class="space-y-2 text-sm">
+                                ${this.drafts.map(draft => `
+                                    <li class="p-2 border rounded-lg cursor-pointer transition-all ${draft.id === this.currentDraftId ? 'bg-[#003049] text-white border-[#003049]' : 'bg-gray-50 hover:bg-gray-100'}"
+                                        onclick="window.app.selectDraft('${draft.id}')">
+                                        <p class="font-medium truncate">${draft.title || 'Untitled Draft'}</p>
+                                        <p class="text-xs ${draft.id === this.currentDraftId ? 'text-white/80' : 'text-gray-500'}">
+                                            ${new Date(draft.saveDate).toLocaleDateString('id-ID')}
+                                        </p>
+                                    </li>
+                                `).join('')}
+                                ${this.drafts.length === 0 && !this.isLoadingDrafts ? '<p class="text-gray-500 italic text-sm">Belum ada draf tersimpan.</p>' : ''}
+                            </ul>
+                        </div>
+                    </div>
+                `;
+            },
+
+            /**
+             * Renders the Editor View (Form).
+             */
+            renderEditor() {
+                const data = this.data;
+                const generateButtonState = this.isLoadingAI ? 'opacity-70 cursor-not-allowed' : 'hover:bg-[#e8b141]';
+                
+                return `
+                    <form id="proposal-form" class="space-y-8">
+                        <!-- I. Informasi Umum Paket -->
+                        <div class="p-6 bg-white rounded-xl shadow-md border border-gray-200">
+                            <h2 class="text-2xl font-bold text-[#003049] mb-4 border-b pb-2">1. Informasi Umum Paket</h2>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Judul Paket</label>
+                                    <input type="text" name="title" value="${data.title}" class="input-style" placeholder="Cth: Paket Honeymoon Bali Premium">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Destinasi Utama</label>
+                                    <input type="text" name="destination" value="${data.destination}" class="input-style" placeholder="Cth: Bali, Raja Ampat">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Waktu/Periode Tour</label>
+                                    <input type="text" name="period" value="${data.period}" class="input-style" placeholder="Cth: 1 Desember 2024 - 5 Desember 2024">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Durasi (Hari)</label>
+                                    <input type="number" name="duration" value="${data.duration}" class="input-style bg-gray-100" readonly title="Durasi otomatis dihitung dari jumlah hari di itinerary.">
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="block text-sm font-medium text-gray-700">Foto Ilustrasi Paket (URL)</label>
+                                    <input type="text" name="photoUrl" value="${data.photoUrl}" class="input-style" placeholder="Cth: https://.../image.jpg">
+                                    <div class="mt-2 text-xs text-gray-500">Gambar ilustrasi: <a href="${data.photoUrl}" target="_blank" class="text-[#d62828] hover:underline">${data.photoUrl}</a></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- II. Deskripsi & Rencana Perjalanan (Itinerary) -->
+                        <div class="p-6 bg-white rounded-xl shadow-md border border-gray-200">
+                            <h2 class="text-2xl font-bold text-[#003049] mb-4 border-b pb-2">2. Deskripsi & Rencana Perjalanan</h2>
+                            
+                            <!-- Short Description -->
+                            <div class="mb-6 border p-4 rounded-lg bg-gray-50">
+                                <label class="block text-sm font-medium text-gray-700">Deskripsi Singkat (Persuasif)</label>
+                                <textarea name="shortDescription" rows="3" class="input-style mb-2">${data.shortDescription}</textarea>
+                                <button type="button" onclick="window.app.generateShortDescription()" class="ai-button flex items-center ${generateButtonState}" ${this.isLoadingAI ? 'disabled' : ''}>
+                                    ${this.isLoadingAI ? `<i class="fas fa-spinner fa-spin mr-2"></i>` : `<i class="fa-solid fa-wand-magic-sparkles mr-2"></i>`}
+                                    Generate Deskripsi Singkat
+                                </button>
+                                <p class="mt-2 text-xs text-gray-500">Gunakan Gemini AI untuk membuat deskripsi persuasif.</p>
+                            </div>
+
+                            <!-- Daily Itinerary List -->
+                            <h3 class="text-xl font-semibold text-gray-800 mb-3">Rencana Perjalanan Harian (${data.duration} Hari)</h3>
+                            <div class="space-y-4">
+                                ${data.itinerary.map((item, index) => `
+                                    <div class="p-4 border rounded-lg bg-white shadow-sm">
+                                        <div class="flex justify-between items-center mb-3 border-b pb-2">
+                                            <h4 class="text-lg font-bold text-[#d62828]">HARI ${item.day}</h4>
+                                            ${data.itinerary.length > 1 ? `<button type="button" data-action="remove-day" data-index="${index}" class="btn-secondary text-xs"><i class="fa-solid fa-trash-can"></i> Hapus Hari</button>` : ''}
+                                        </div>
+                                        
+                                        <div class="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
+                                            <!-- Time -->
+                                            <div class="md:col-span-3">
+                                                <label class="block text-xs font-medium text-gray-700">Format Waktu</label>
+                                                <input type="text" name="time-${index}" data-itineraryindex="${index}" value="${item.time}" class="input-style text-sm" placeholder="Cth: 08.00 - 10.00">
+                                            </div>
+                                            <!-- Duration -->
+                                            <div class="md:col-span-3">
+                                                <label class="block text-xs font-medium text-gray-700">Perkiraan Durasi (Jam)</label>
+                                                <input type="number" name="durationHours-${index}" data-itineraryindex="${index}" value="${item.durationHours}" class="input-style text-sm" placeholder="Cth: 2">
+                                            </div>
+                                            <!-- Accommodation -->
+                                            <div class="md:col-span-6">
+                                                <label class="block text-xs font-medium text-gray-700">Akomodasi / Hotel Malam Ini</label>
+                                                <input type="text" name="accommodation-${index}" data-itineraryindex="${index}" value="${item.accommodation}" class="input-style text-sm" placeholder="Cth: Hotel Bintang 4 / Penerbangan">
+                                            </div>
+                                        </div>
+
+                                        <!-- Activity -->
+                                        <div class="mb-3">
+                                            <label class="block text-xs font-medium text-gray-700">Aktivitas</label>
+                                            <textarea name="activity-${index}" data-itineraryindex="${index}" rows="2" class="input-style text-sm mb-2">${item.activity}</textarea>
+                                            <button type="button" data-action="refine-itinerary" data-index="${index}" class="ai-button text-xs flex items-center ${generateButtonState}" ${this.isLoadingAI ? 'disabled' : ''}>
+                                                ${this.isLoadingAI ? `<i class="fas fa-spinner fa-spin mr-1"></i>` : `<i class="fa-solid fa-meteor mr-1"></i>`}
+                                                Sempurnakan Teks (AI)
+                                            </button>
+                                        </div>
+
+                                        <!-- Meals -->
+                                        <div class="mt-4 pt-3 border-t">
+                                            <label class="text-sm font-semibold text-gray-700 mr-4">Ceklis Makanan:</label>
+                                            ${['breakfast', 'lunch', 'dinner'].map(meal => `
+                                                <label class="inline-flex items-center mr-4 text-sm">
+                                                    <input type="checkbox" name="meal-${meal}-${index}" data-itineraryindex="${index}" data-mealtype="${meal}" ${item.meals[meal] ? 'checked' : ''} class="form-checkbox text-[#003049] rounded">
+                                                    <span class="ml-2">${meal.charAt(0).toUpperCase() + meal.slice(1)}</span>
+                                                </label>
+                                            `).join('')}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            
+                            <button type="button" onclick="window.app.addDay()" class="mt-4 w-full bg-[#83c5be] text-[#003049] p-3 rounded-lg font-semibold transition-colors hover:bg-[#72b4ac] flex items-center justify-center">
+                                <i class="fa-solid fa-calendar-plus mr-2"></i> Tambah Hari Baru
+                            </button>
+                            
+                            <!-- GEMINI FEATURE: Translator -->
+                            <div class="mt-6 pt-4 border-t border-gray-200">
+                                <button type="button" onclick="window.app.translateItinerary()" class="ai-button w-full flex items-center justify-center ${generateButtonState}" ${this.isLoadingAI ? 'disabled' : ''}>
+                                    ${this.isLoadingAI ? `<i class="fas fa-spinner fa-spin mr-2"></i>` : `<i class="fa-solid fa-language mr-2"></i> ✨`}
+                                    Terjemahkan Itinerary ke Bahasa Inggris
+                                </button>
+                                <p class="mt-2 text-xs text-gray-500">Gunakan Gemini AI untuk membuat versi Itinerary Bahasa Inggris (akan tampil di Preview).</p>
+                            </div>
+
+                        </div>
+
+                        <!-- III. Harga & Opsi -->
+                        <div class="p-6 bg-white rounded-xl shadow-md border border-gray-200">
+                            <h2 class="text-2xl font-bold text-[#003049] mb-4 border-b pb-2">3. Harga & Opsi Tambahan</h2>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Harga Dasar Paket (IDR)</label>
+                                    <input type="number" name="price.idr" value="${data.price.idr}" class="input-style" placeholder="Rupiah">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Harga Dasar Paket (USD)</label>
+                                    <input type="number" name="price.usd" value="${data.price.usd}" class="input-style" placeholder="Dolar Amerika">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Harga Dasar Paket (MYR)</label>
+                                    <input type="number" name="price.myr" value="${data.price.myr}" class="input-style" placeholder="Ringgit Malaysia">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Harga Dasar Paket (SGD)</label>
+                                    <input type="number" name="price.sgd" value="${data.price.sgd}" class="input-style" placeholder="Dolar Singapura">
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="block text-sm font-medium text-gray-700">Pilihan Harga Tambahan (Opsional, per baris)</label>
+                                    <textarea name="options" rows="3" class="input-style" placeholder="Cth: Surcharge high season: IDR 500,000">${data.options}</textarea>
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="block text-sm font-medium text-gray-700">Masa Berlaku Harga</label>
+                                    <input type="text" name="priceValidity" value="${data.priceValidity}" class="input-style" placeholder="Cth: Berlaku hingga 31 Desember 2024">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- IV. Detail Konten Wajib -->
+                        <div class="p-6 bg-white rounded-xl shadow-md border border-gray-200">
+                            <h2 class="text-2xl font-bold text-[#003049] mb-4 border-b pb-2">4. Paket Termasuk & Tidak Termasuk</h2>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Paket Termasuk (Bullet Points)</label>
+                                    <textarea name="includes" rows="5" class="input-style" placeholder="Pisahkan dengan baris baru untuk bullet point">${data.includes}</textarea>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Paket Tidak Termasuk (Bullet Points)</label>
+                                    <textarea name="excludes" rows="5" class="input-style" placeholder="Pisahkan dengan baris baru untuk bullet point">${data.excludes}</textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- V. Syarat & Ketentuan (T&C) & NOTES -->
+                        <div class="p-6 bg-white rounded-xl shadow-md border border-gray-200">
+                            <h2 class="text-2xl font-bold text-[#003049] mb-4 border-b pb-2">5. Syarat & Ketentuan dan Catatan</h2>
+                            
+                            <!-- GEMINI FEATURE: T&C Generator Button -->
+                            <div class="mb-6">
+                                <button type="button" onclick="window.app.generateTermsAndConditions()" class="ai-button w-full flex items-center justify-center ${generateButtonState}" ${this.isLoadingAI ? 'disabled' : ''}>
+                                    ${this.isLoadingAI ? `<i class="fas fa-spinner fa-spin mr-2"></i>` : `<i class="fa-solid fa-file-contract mr-2"></i> ✨`}
+                                    Buat Draf Syarat & Ketentuan Otomatis
+                                </button>
+                                <p class="mt-2 text-xs text-gray-500">Gemini akan membuat draf Kebijakan Pembayaran dan Pembatalan berdasarkan harga paket.</p>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">NOTES (Catatan Penting)</label>
+                                    <textarea name="notes" rows="3" class="input-style">${data.notes}</textarea>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Syarat & Ketentuan Umum</label>
+                                    <textarea name="terms" rows="3" class="input-style">${data.terms}</textarea>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Ketentuan Pembayaran</label>
+                                    <textarea name="paymentTerms" rows="4" class="input-style">${data.paymentTerms}</textarea>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Ketentuan Pembatalan</label>
+                                    <textarea name="cancellationPolicy" rows="4" class="input-style">${data.cancellationPolicy}</textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- VI. Payment Method -->
+                        <div class="p-6 bg-white rounded-xl shadow-md border border-gray-200">
+                            <h2 class="text-2xl font-bold text-[#003049] mb-4 border-b pb-2">6. Metode Pembayaran</h2>
+                            <label class="block text-sm font-medium text-gray-700">Detail Bank (dapat diubah)</label>
+                            <textarea name="paymentMethod" rows="5" class="input-style">${data.paymentMethod}</textarea>
+                        </div>
+                    </form>
+                `;
+            },
+
+            /**
+             * Helper function to render the core proposal content, used by both Preview and Print.
+             */
+            renderProposalContent() {
+                const data = this.data;
+                const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
+                
+                // Helper to convert newline text to HTML list items
+                const toHtmlList = (text) => {
+                    return text.split('\n')
+                        .map(line => line.trim())
+                        .filter(line => line.length > 0)
+                        .map(line => `<li>${line.replace(/^- /, '')}</li>`)
+                        .join('');
+                };
+
+                // Helper to render the translated itinerary
+                const renderTranslatedItinerary = () => {
+                    if (!data.translatedItinerary) {
+                        return `<p class="italic text-gray-500">Terjemahan Bahasa Inggris belum dibuat. Silakan gunakan tombol ✨ Terjemahkan Itinerary di mode Editor.</p>`;
+                    }
+                    // Simply render the text as pre-formatted content
+                    return `<pre class="whitespace-pre-wrap font-sans text-sm p-4 border border-gray-200 bg-white rounded-lg">${data.translatedItinerary}</pre>`;
+                }
+
+
+                return `
+                    <div id="proposal-content" class="proposal-container">
+                        
+                        <!-- Header & Title Block -->
+                        <header class="text-center pb-8 border-b-4 border-[#d62828] mb-6">
+                            <h1 class="text-4xl font-extrabold text-[#003049]">PROPOSAL PAKET TOUR</h1>
+                            <h2 class="text-2xl font-bold text-[#d62828] mt-2">${data.title.toUpperCase()}</h2>
+                            <p class="text-gray-600 mt-2 text-lg">Oleh <span class="font-semibold">Explorar Indonesia</span></p>
+                        </header>
+
+                        <!-- Illustration Image -->
+                        <div class="mb-8">
+                            <img src="${data.photoUrl}" alt="Foto Ilustrasi Paket Tour" class="w-full h-auto object-cover rounded-lg shadow-lg" onerror="this.onerror=null;this.src='https://placehold.co/900x500/003049/ffffff?text=FOTO+ILLUSTRASI+PAKET+TOUR';">
+                        </div>
+
+                        <!-- I. Ringkasan Paket -->
+                        <section class="mb-8 p-6 bg-gray-50 rounded-lg">
+                            <h3 class="text-2xl font-bold text-[#003049] mb-3 border-b-2 border-gray-200 pb-2">Ringkasan Paket</h3>
+                            <div class="grid grid-cols-2 gap-4 text-gray-700">
+                                <p><strong>Destinasi Utama:</strong> ${data.destination}</p>
+                                <p><strong>Durasi:</strong> ${data.duration} Hari</p>
+                                <p><strong>Periode Tour:</strong> ${data.period}</p>
+                                <p><strong>Masa Berlaku Harga:</strong> ${data.priceValidity}</p>
+                            </div>
+                            <p class="mt-4 italic text-gray-800">${data.shortDescription}</p>
+                        </section>
+
+                        <!-- II. Itinerary / Rencana Perjalanan (Indonesian) -->
+                        <section class="mb-8">
+                            <h3 class="text-2xl font-bold text-[#003049] mb-4 border-b-2 border-[#fcbf49] pb-2">Rencana Perjalanan (Itinerary) - IDN</h3>
+                            <div class="space-y-6">
+                                ${data.itinerary.map(item => `
+                                    <div class="p-4 border-l-4 border-[#d62828] bg-white shadow-md rounded-r-lg">
+                                        <h4 class="text-xl font-bold text-[#003049] mb-2">HARI ${item.day}</h4>
+                                        <p class="text-sm font-semibold text-[#d62828] mb-1">
+                                            <i class="fa-regular fa-clock"></i> ${item.time} (${item.durationHours} Jam)
+                                        </p>
+                                        <p class="text-gray-700 mb-2">${item.activity}</p>
+                                        <div class="flex flex-wrap items-center text-xs text-gray-500 space-x-4">
+                                            <span class="font-medium"><i class="fa-solid fa-bed mr-1"></i> Akomodasi: ${item.accommodation}</span>
+                                            <span class="font-medium"><i class="fa-solid fa-utensils mr-1"></i> Meals: 
+                                                ${item.meals.breakfast ? '<span class="text-green-600">B</span>' : '<span class="text-red-500">B</span>'}, 
+                                                ${item.meals.lunch ? '<span class="text-green-600">L</span>' : '<span class="text-red-500">L</span>'}, 
+                                                ${item.meals.dinner ? '<span class="text-green-600">D</span>' : '<span class="text-red-500">D</span>'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <p class="mt-4 italic text-sm text-gray-600">${data.notes}</p>
+                        </section>
+                        
+                        <!-- II. Itinerary / Rencana Perjalanan (English) -->
+                        <section class="mb-8">
+                            <h3 class="text-2xl font-bold text-[#003049] mb-4 border-b-2 border-[#fcbf49] pb-2">Rencana Perjalanan (Itinerary) - ENG</h3>
+                            ${renderTranslatedItinerary()}
+                        </section>
+
+
+                        <!-- III. Harga Paket & Opsi -->
+                        <section class="mb-8 p-6 bg-gray-50 rounded-lg">
+                            <h3 class="text-2xl font-bold text-[#003049] mb-4 border-b-2 border-gray-200 pb-2">Harga & Opsi</h3>
+                            <table class="min-w-full bg-white rounded-lg overflow-hidden shadow">
+                                <thead class="bg-[#d62828] text-white">
+                                    <tr>
+                                        <th class="p-3 text-left font-semibold">Tipe Harga</th>
+                                        <th class="p-3 text-right font-semibold">Nilai</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="border-b hover:bg-gray-50">
+                                        <td class="p-3 font-semibold text-[#003049]">Harga Dasar Paket (IDR)</td>
+                                        <td class="p-3 text-right font-bold text-[#d62828]">${formatRupiah(data.price.idr)}</td>
+                                    </tr>
+                                    <tr class="border-b hover:bg-gray-50">
+                                        <td class="p-3">Harga Dasar Paket (USD)</td>
+                                        <td class="p-3 text-right">USD ${data.price.usd.toLocaleString('en-US')}</td>
+                                    </tr>
+                                    <tr class="border-b hover:bg-gray-50">
+                                        <td class="p-3">Harga Dasar Paket (MYR)</td>
+                                        <td class="p-3 text-right">MYR ${data.price.myr.toLocaleString('en-US')}</td>
+                                    </tr>
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="p-3">Harga Dasar Paket (SGD)</td>
+                                        <td class="p-3 text-right">SGD ${data.price.sgd.toLocaleString('en-US')}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            ${data.options.trim() ? `
+                                <h4 class="text-lg font-semibold text-gray-800 mt-4 mb-2">Opsi Tambahan:</h4>
+                                <ul class="list-disc ml-5 text-gray-700">
+                                    ${toHtmlList(data.options)}
+                                </ul>
+                            ` : ''}
+                        </section>
+
+                        <!-- IV. Termasuk & Tidak Termasuk -->
+                        <section class="mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <h3 class="text-xl font-bold text-[#003049] mb-3 border-b-2 border-[#83c5be] pb-2">Paket Termasuk (<i class="fa-solid fa-check text-green-600"></i>)</h3>
+                                <ul class="list-disc ml-5 text-gray-700 space-y-1">
+                                    ${toHtmlList(data.includes)}
+                                </ul>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-[#003049] mb-3 border-b-2 border-[#83c5be] pb-2">Paket Tidak Termasuk (<i class="fa-solid fa-xmark text-red-600"></i>)</h3>
+                                <ul class="list-disc ml-5 text-gray-700 space-y-1">
+                                    ${toHtmlList(data.excludes)}
+                                </ul>
+                            </div>
+                        </section>
+
+                        <!-- V & VI. Syarat, Pembayaran, dan Kontak -->
+                        <section class="p-6 bg-[#f7f9fc] rounded-lg border">
+                            <h3 class="text-2xl font-bold text-[#003049] mb-4 border-b-2 border-gray-300 pb-2">Syarat & Ketentuan dan Pembayaran</h3>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <h4 class="text-lg font-semibold text-gray-800 mb-2">Syarat & Ketentuan Umum</h4>
+                                    <p class="whitespace-pre-wrap text-sm text-gray-700">${data.terms}</p>
+                                </div>
+                                <div>
+                                    <h4 class="text-lg font-semibold text-gray-800 mb-2">Ketentuan Pembayaran</h4>
+                                    <p class="whitespace-pre-wrap text-sm text-gray-700">${data.paymentTerms}</p>
+                                </div>
+                                <div>
+                                    <h4 class="text-lg font-semibold text-gray-800 mb-2">Ketentuan Pembatalan</h4>
+                                    <p class="whitespace-pre-wrap text-sm text-gray-700">${data.cancellationPolicy}</p>
+                                </div>
+                                <div>
+                                    <h4 class="text-lg font-semibold text-gray-800 mb-2">Metode Pembayaran</h4>
+                                    <p class="whitespace-pre-wrap font-mono text-sm text-gray-800 p-2 bg-white border rounded">${data.paymentMethod}</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- VII. Informasi Kontak (Footer) -->
+                        <footer class="text-center mt-10 pt-6 border-t-4 border-[#d62828] text-gray-600">
+                            <h4 class="text-xl font-bold text-[#003049] mb-3">Informasi Kontak Explorar Indonesia</h4>
+                            <p class="text-base font-semibold">PIC: ${CONTACT_INFO.picName}</p>
+                            <p>Telp: ${CONTACT_INFO.phone} | Email: ${CONTACT_INFO.email}</p>
+                            <p class="text-sm italic mt-1">Alamat Kantor: ${CONTACT_INFO.address}</p>
+                        </footer>
+                    </div>
+                `;
+            },
+            
+            /**
+             * Renders the Preview View (Google Docs Ready HTML Template).
+             */
+            renderPreview() {
+                return `
+                    <div class="proposal-preview-wrapper">
+                        <!-- Export Controls -->
+                        <div class="mb-4 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 p-4 bg-blue-50 rounded-lg border border-blue-200 shadow-inner">
+                            <button id="copy-to-gdoc" class="btn-primary flex items-center justify-center bg-green-600 hover:bg-green-700">
+                                <i class="fa-solid fa-copy mr-2"></i> Salin ke Google Docs (One-Click)
+                            </button>
+                            <div class="text-sm text-blue-800 flex items-center">
+                                <i class="fa-solid fa-lightbulb mr-2"></i> Klik tombol di samping, lalu Tempel (Paste) di dokumen Google Docs Anda.
+                            </div>
+                        </div>
+
+                        ${this.renderProposalContent()}
+
+                        <div class="mt-8 p-4 bg-yellow-100 border border-yellow-300 text-yellow-800 rounded-lg">
+                            <p class="font-bold">Instruksi Ekspor Lanjut</p>
+                            <p class="text-sm mt-2">Untuk hasil terbaik di Google Docs, klik tombol "Salin ke Google Docs" di atas. Alternatif: Pilih Seluruh Konten Proposal (CTRL+A pada Proposal), lalu Salin (CTRL+C) dan Tempel (CTRL+V) ke Google Docs.</p>
+                        </div>
+                    </div>
+                `;
+            }
+        };
+
+        // Initialize the app state and render
+        window.onload = () => {
+            // Set initial data and render once
+            window.app = app;
+            window.app.render(); 
+        };
+    </script>
+    
+    <!-- Main Application Container -->
+    <div id="app-container" class="min-h-screen flex">
+        <!-- Content will be injected here by app.render() -->
+        <div class="w-full text-center p-20 text-gray-100 relative z-10">
+            <i class="fas fa-circle-notch fa-spin text-4xl mb-3 text-[#fcbf49]"></i>
+            <p>Memuat aplikasi dan otentikasi...</p>
+        </div>
+    </div>
+
+</body>
+</html>
